@@ -7,6 +7,7 @@ import re
 from lib.AuthDialog import AuthDialog
 import datetime
 from lib.YouViewrLayout import Ui_MainWindow
+import pytube
 
 
 
@@ -28,6 +29,11 @@ class Main(QMainWindow, Ui_MainWindow):
 
         #재생 여부
         self.is_play = False
+        #유투브 관련 작업
+        self.youtb = None
+        self.youtb_fsize = 0
+
+
 
 
 
@@ -63,6 +69,7 @@ class Main(QMainWindow, Ui_MainWindow):
         self.webView.loadProgress.connect(self.showProgressBrowserLoading)
         self.fileNavButton.clicked.connect(self.selectDownPath)
         self.calendarWidget.clicked.connect(self.append_date)
+        self.startButton.clicked.connect(self.downloadYoutb)
     def authCheck(self):
         dlg = AuthDialog()
         dlg.exec_()
@@ -102,13 +109,32 @@ class Main(QMainWindow, Ui_MainWindow):
                 self.previewButton.setText('중지')
                 self.is_play = True
                 self.startButton.setEnabled(True)
+                self.initialYouWork(url)
             else:
                 QMessageBox.about(self,"URL 형식오류","Youtube 주소형식이 아닙니다.")
                 self.urlTextEdit.clear()
                 self.urlTextEdit.setFocus(True)
 
 
+    def initialYouWork(self,url):
+        video_list = pytube.YouTube(url)
+        #로빙다 계산
+        video_list.register_on_progress_callback(self.showProgressDownLoading)
 
+        self.youtb = video_list.streams.all()
+        self.streamCombobox.clear()
+        for q in self.youtb:
+            # print(q.itag,q.mime_type,q.abr)
+            tmp_list, str_list =[],[]
+            tmp_list.append(str(q.mime_type or ''))
+            tmp_list.append(str(q.res or ''))
+            tmp_list.append(str(q.fps or ''))
+            tmp_list.append(str(q.abr or ''))
+            # print(tmp_list)
+
+            str_list = [x for x in tmp_list if x !='']
+            print('join',','.join(str_list))
+            self.streamCombobox.addItem(','.join(str_list))
 
 
     def append_log_msg(self,act):
@@ -134,17 +160,31 @@ class Main(QMainWindow, Ui_MainWindow):
         fpath = QFileDialog.getExistingDirectory(self,'select Directory')
         self.pathTextEdit.setText(fpath)
 
-
+    @pyqtSlot()
     def append_date(self):
         cur_date = self.calendarWidget.selectedDate()
         # print('click date', self.calendarWidget.selectedDate())
         print(str(cur_date.year()) +'-' + str(cur_date.month()) + '-' + str(cur_date.day()))
         self.append_log_msg('calender clik')
 
+    @pyqtSlot()
+    def downloadYoutb(self):
+        down_dir = self.pathTextEdit.text().strip()
+        if down_dir is None or down_dir =='' or not down_dir:
+            QMessageBox.about(self,'경로 선택','다운로드 받을 경로를 선택해주세요')
+            self.pathTextEdit.setFocus(True)
+            return None
 
+        self.youtb_fsize = self.youtb[self.streamCombobox.currentIndex()].filesize
+        print('fsize', self.youtb_fsize)
+        self.youtb[self.streamCombobox.currentIndex()].download(down_dir)
+        self.append_log_msg('Download Clik')
 
+    def showProgressDownLoading(self, stream, chunk, finle_handle, bytes_remaining):
+        print(int(self.youtb_fsize - bytes_remaining))
+        print('bytes_remaining', bytes_remaining)
+        self.progressBar_2.setValue(int(((self.youtb_fsize - bytes_remaining) / self.youtb_fsize) * 100))
 
-        #경로선택
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
